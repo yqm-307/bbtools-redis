@@ -27,22 +27,24 @@ public:
     std::pair<RedisErrOpt, Reply::SPtr> SyncExecCmd(const std::string& command);
     std::pair<RedisErrOpt, Reply::SPtr> SyncExecCmd(const char*, ...);
 
-    Reply* GetReply();
+    Reply* GetReply() { return nullptr;}
 
-    bool IsConnected();
+    bool IsConnected() { return (m_raw_ctx != nullptr); }
 
     void Disconnect();
 
 protected:
     RedisErrOpt Connect();
     std::pair<RedisErrOpt, std::shared_ptr<Reply>> CheckReply(redisReply* reply);
+    std::pair<RedisErrOpt, Reply::SPtr> __SyncExecCmdByString(const char* cmd);
 
 private:
     redisContext* m_raw_ctx;
     bbt::net::IPAddress m_redis_address;
     static std::mutex m_buf_lock;
-    static char m_format_buffer[COMMAND_MAX_SIZE];
+    static char m_format_buffer[];
 };
+
 
 #define RedisFormatCommand(target, format, ...) redisFormatCommand(target, format, ##__VA_ARGS__)
 

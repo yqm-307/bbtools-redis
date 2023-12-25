@@ -25,9 +25,9 @@ public:
     template<typename OutParamType>
     RedisErrOpt Transform(OutParamType& value) const { return GetValue(value); }
 protected:
-    RedisErrOpt GetValue(int& value);
-    RedisErrOpt GetValue(std::string& value);
-    RedisErrOpt GetValue(double& value);
+    RedisErrOpt GetValue(int& value) const;
+    RedisErrOpt GetValue(std::string& value) const;
+    RedisErrOpt GetValue(double& value) const;
 
 private:
     redisReply* m_reply{nullptr};

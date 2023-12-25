@@ -15,4 +15,5 @@ add_library(redishelper SHARED ${SRCS})
 
 target_link_libraries(redishelper
     hiredis
+    ybbt
 )

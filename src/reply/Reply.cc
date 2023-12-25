@@ -7,6 +7,7 @@ namespace bbt::database::redis
 Reply::Reply(redisReply* reply)
     :m_reply(reply)
 {
+    m_type = (redis::ReplyType)m_reply->type;
 }
 
 Reply::~Reply()
@@ -27,7 +28,7 @@ void Reply::Clear()
     m_reply = nullptr;
 }
 
-RedisErrOpt Reply::GetValue(int& value)
+RedisErrOpt Reply::GetValue(int& value) const
 {
     if (m_type != redis::ReplyType::kInteger) {
         return RedisErr("not is integer", err::RedisErrType::Reply_UnExpectedType);
@@ -38,7 +39,7 @@ RedisErrOpt Reply::GetValue(int& value)
     return std::nullopt;
 }
 
-RedisErrOpt Reply::GetValue(std::string& value)
+RedisErrOpt Reply::GetValue(std::string& value) const
 {
     if (m_type != redis::ReplyType::kCString) {
         return RedisErr("not is string", err::RedisErrType::Reply_UnExpectedType);
@@ -49,7 +50,7 @@ RedisErrOpt Reply::GetValue(std::string& value)
     return std::nullopt;
 }
 
-RedisErrOpt Reply::GetValue(double& value)
+RedisErrOpt Reply::GetValue(double& value) const
 {
     if (m_type != redis::ReplyType::kDouble) {
         return RedisErr("not is double", err::RedisErrType::Reply_UnExpectedType);

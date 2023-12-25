@@ -3,6 +3,10 @@
 namespace bbt::database::redis
 {
 
+std::mutex Connection::m_buf_lock;
+char Connection::m_format_buffer[COMMAND_MAX_SIZE];
+
+
 Connection::Connection(const std::string& ip, short port)
     :m_redis_address(ip, port)
 {
@@ -68,16 +72,20 @@ std::pair<RedisErrOpt, Reply::SPtr> Connection::SyncExecCmd(const char* format, 
     vsnprintf(m_format_buffer, sizeof(m_format_buffer), format, va);
     va_end(va);
 
-    SyncExecCmd(m_format_buffer);
-
-    return ;
+    return __SyncExecCmdByString(m_format_buffer);
 }
 
 std::pair<RedisErrOpt, Reply::SPtr> Connection::SyncExecCmd(const std::string& command)
 {
-    void* raw_reply = redisCommand(m_raw_ctx, command.c_str());
+    return __SyncExecCmdByString(command.c_str());
+}
+
+std::pair<RedisErrOpt, Reply::SPtr> Connection::__SyncExecCmdByString(const char* cmd)
+{
+    void* raw_reply = redisCommand(m_raw_ctx, cmd);
     return CheckReply(static_cast<redisReply*>(raw_reply));
 }
+
 
 std::pair<RedisErrOpt, Reply::SPtr> Connection::CheckReply(redisReply* reply)
 {

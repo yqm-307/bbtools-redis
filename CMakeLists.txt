@@ -7,4 +7,4 @@ set(CXX_STANDARD C++17)
 
 
 add_subdirectory(src)
-# add_subdirectory(example)
+add_subdirectory(example)

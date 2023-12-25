@@ -22,6 +22,9 @@ class RedisErr:
 public:
     RedisErr(const std::string& errinfo, RedisErrType errtype):Errcode(errinfo, errtype) {}
     ~RedisErr() {}
+
+    std::string What() { return GetMsg(); }
+    int Type() { return GetErrType(); }
 private:
 };
 
