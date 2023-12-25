@@ -1,4 +1,4 @@
-#include "connect/Connect.hpp"
+#include "connect/Connection.hpp"
 
 int main()
 {
