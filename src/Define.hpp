@@ -17,7 +17,9 @@ namespace bbt::database::redis
 const inline size_t COMMAND_MAX_SIZE = 1024 * 1024 * 8;
 
 class Reply;
+class RedisConnection;
 class Connection;
+class AsyncConnection;
 typedef err::RedisErr RedisErr;
 typedef std::optional<err::RedisErr> RedisErrOpt;
 typedef err::RedisErrType RedisErrType;
@@ -42,5 +44,12 @@ enum ReplyType
     kBignum =    REDIS_REPLY_BIGNUM,
     kVerb =      REDIS_REPLY_VERB,
 };
+
+/* RedisConnection 的事件函数原型 */
+typedef std::function<void()> RedisConnectionOnCloseCallback;
+typedef std::function<void()> RedisConnectionOnConnectCallback;
+typedef std::function<void()> RedisConnectionOnReadCallback;
+typedef std::function<void()> RedisConnectionOnWriteCallback;
+typedef std::function<void(std::shared_ptr<Reply>)> OnReplyCallback;    /* 异步执行cmd，获取result回调 */
 
 }
