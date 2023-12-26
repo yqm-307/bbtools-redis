@@ -4,6 +4,12 @@
 namespace bbt::database::redis
 {
 
+void AsyncConnection::OnReply(redisAsyncContext* ctx, void* rpy, void* udata)
+{
+
+}
+
+
 AsyncConnection::AsyncConnection(const std::string& ip, short port)
     :m_redis_addr(ip, port)
 {
@@ -49,6 +55,20 @@ bool AsyncConnection::IsConnected()
 {
     return (m_raw_async_ctx != nullptr);
 }
+
+RedisErrOpt AsyncConnection::AsyncExecCmd(const std::string& command, const OnReplyCallback& cb)
+{
+    if (command.empty())
+        return RedisErr("command is empty", RedisErrType::Comm_ParamIsNull);
+
+    auto wptr = new WPtr();
+    wptr->ptr =  weak_from_this();
+    //TODO 解析errcode
+    int redis_err = redisAsyncCommand(m_raw_async_ctx, &AsyncConnection::OnReply, (void*)wptr, command.c_str());
+
+    redisAsyncWrite(m_raw_async_ctx);
+}
+
 
 
 } // namespace bbt::database::redis
