@@ -10,15 +10,19 @@ void AsyncConnection::OnReply(redisAsyncContext* ctx, void* rpy, void* udata)
     auto* upvalue = static_cast<OnReplyUpValue*>(udata);
     auto reply = Reply(static_cast<redisReply*>(rpy));
 
+    auto conn_ptr = upvalue->ptr.lock();
+    if (conn_ptr != nullptr) {
+        conn_ptr->m_on_reply_handler(std::make_shared<Reply>(rpy));
+    }
 }
 
-void AsyncConnection::Send(redisContext* ctx)
-{
-}
+// void AsyncConnection::Send(redisContext* ctx)
+// {
+// }
 
-void AsyncConnection::Recv(redisContext* ctx, char* buf, size_t size)
-{
-}
+// void AsyncConnection::Recv(redisContext* ctx, char* buf, size_t size)
+// {
+// }
 
 
 AsyncConnection::AsyncConnection(const std::string& ip, short port)
@@ -72,22 +76,32 @@ RedisErrOpt AsyncConnection::AsyncExecCmd(const std::string& command, const OnRe
     if (command.empty())
         return RedisErr("command is empty", RedisErrType::Comm_ParamIsNull);
 
+    m_on_reply_handler = cb;
     auto wptr = new OnReplyUpValue();
     wptr->ptr =  weak_from_this();
     //TODO 解析errcode
     int redis_err = redisAsyncCommand(m_raw_async_ctx, &AsyncConnection::OnReply, (void*)wptr, command.c_str());
 
-    redisAsyncWrite(m_raw_async_ctx);
+    OnSend();
 }
 
-void AsyncConnection::DoNetSend()
+void AsyncConnection::OnSend()
 {
     redisAsyncHandleWrite(m_raw_async_ctx);
 }
 
-void AsyncConnection::DoNetRecv()
+void AsyncConnection::OnRecv()
 {
     redisAsyncHandleRead(m_raw_async_ctx);
+}
+
+redisFD AsyncConnection::GetSocket()
+{
+    if (IsConnected()) {
+        return m_raw_async_ctx->c.fd;
+    }
+
+    return REDIS_INVALID_FD;
 }
 
 } // namespace bbt::database::redis
