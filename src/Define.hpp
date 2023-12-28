@@ -52,4 +52,7 @@ typedef std::function<void()> RedisConnectionOnReadCallback;
 typedef std::function<void()> RedisConnectionOnWriteCallback;
 typedef std::function<void(std::shared_ptr<Reply>)> OnReplyCallback;    /* 异步执行cmd，获取result回调 */
 
+typedef std::function<ssize_t(const char*, size_t)> IOWriteHandler;
+typedef std::function<ssize_t(const char*, size_t)> IOReadHandler;
+
 }

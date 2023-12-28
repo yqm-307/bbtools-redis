@@ -1,4 +1,5 @@
 #include "AsyncConnection.hpp"
+#include "reply/Reply.hpp"
 #include <hiredis/async.h>
 
 namespace bbt::database::redis
@@ -6,7 +7,17 @@ namespace bbt::database::redis
 
 void AsyncConnection::OnReply(redisAsyncContext* ctx, void* rpy, void* udata)
 {
+    auto* upvalue = static_cast<OnReplyUpValue*>(udata);
+    auto reply = Reply(static_cast<redisReply*>(rpy));
 
+}
+
+void AsyncConnection::Send(redisContext* ctx)
+{
+}
+
+void AsyncConnection::Recv(redisContext* ctx, char* buf, size_t size)
+{
 }
 
 
@@ -61,7 +72,7 @@ RedisErrOpt AsyncConnection::AsyncExecCmd(const std::string& command, const OnRe
     if (command.empty())
         return RedisErr("command is empty", RedisErrType::Comm_ParamIsNull);
 
-    auto wptr = new WPtr();
+    auto wptr = new OnReplyUpValue();
     wptr->ptr =  weak_from_this();
     //TODO 解析errcode
     int redis_err = redisAsyncCommand(m_raw_async_ctx, &AsyncConnection::OnReply, (void*)wptr, command.c_str());
@@ -69,6 +80,14 @@ RedisErrOpt AsyncConnection::AsyncExecCmd(const std::string& command, const OnRe
     redisAsyncWrite(m_raw_async_ctx);
 }
 
+void AsyncConnection::DoNetSend()
+{
+    redisAsyncHandleWrite(m_raw_async_ctx);
+}
 
+void AsyncConnection::DoNetRecv()
+{
+    redisAsyncHandleRead(m_raw_async_ctx);
+}
 
 } // namespace bbt::database::redis
