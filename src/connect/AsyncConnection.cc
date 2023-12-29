@@ -8,11 +8,11 @@ namespace bbt::database::redis
 void AsyncConnection::OnReply(redisAsyncContext* ctx, void* rpy, void* udata)
 {
     auto* upvalue = static_cast<OnReplyUpValue*>(udata);
-    auto reply = Reply(static_cast<redisReply*>(rpy));
+    auto* reply = static_cast<redisReply*>(rpy);
 
     auto conn_ptr = upvalue->ptr.lock();
     if (conn_ptr != nullptr) {
-        conn_ptr->m_on_reply_handler(std::make_shared<Reply>(rpy));
+        conn_ptr->m_on_reply_handler(std::make_shared<Reply>(reply));
     }
 }
 
@@ -59,11 +59,12 @@ RedisErrOpt AsyncConnection::Connect()
 RedisErrOpt AsyncConnection::Disconnect()
 {
     if (!IsConnected())
-        return;
+        return std::nullopt;
 
     redisAsyncDisconnect(m_raw_async_ctx);
     redisAsyncFree(m_raw_async_ctx);
     m_raw_async_ctx = nullptr;
+    return std::nullopt;
 }
 
 bool AsyncConnection::IsConnected()
@@ -78,11 +79,13 @@ RedisErrOpt AsyncConnection::AsyncExecCmd(const std::string& command, const OnRe
 
     m_on_reply_handler = cb;
     auto wptr = new OnReplyUpValue();
-    wptr->ptr =  weak_from_this();
+    wptr->ptr = std::move(weak_from_this());
     //TODO 解析errcode
     int redis_err = redisAsyncCommand(m_raw_async_ctx, &AsyncConnection::OnReply, (void*)wptr, command.c_str());
 
     OnSend();
+
+    return std::nullopt;
 }
 
 void AsyncConnection::OnSend()
