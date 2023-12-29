@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <signal.h>
+#include <thread>
 
 #include <hiredis/hiredis.h>
 #include <hiredis/async.h>
@@ -15,10 +16,9 @@ void getCallback(redisAsyncContext *c, void *r, void *privdata) {
         }
         return;
     }
-    printf("argv[%s]: %s\n", (char*)privdata, reply->str);
+    printf("key: %s, type: %d\n", reply->str, reply->type);
 
-    /* Disconnect after receiving the reply to GET */
-    redisAsyncDisconnect(c);
+    // redisAsyncDisconnect(c);
 }
 
 void connectCallback(const redisAsyncContext *c, int status) {
@@ -60,8 +60,19 @@ int main (int argc, char **argv) {
     redisLibeventAttach(c,base);
     redisAsyncSetConnectCallback(c,connectCallback);
     redisAsyncSetDisconnectCallback(c,disconnectCallback);
-    redisAsyncCommand(c, NULL, NULL, "SET key %b", argv[argc-1], strlen(argv[argc-1]));
-    redisAsyncCommand(c, getCallback, (char*)"end-1", "GET key");
-    event_base_dispatch(base);
+    auto t = new std::thread([&](){
+        event_base_dispatch(base);
+    });
+
+
+    for (int j = 0; j < 10; ++j) {
+        redisAsyncCommand(c, NULL, NULL, "SET key %d", j);
+        redisAsyncCommand(c, getCallback, NULL, "GET key");
+    }
+
+    redisAsyncDisconnect(c);
+
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+
     return 0;
 }
