@@ -1,5 +1,5 @@
 #pragma once
-#include <bbt/net/IPAddress.hpp>
+#include <bbt/base/net/IPAddress.hpp>
 #include "Define.hpp"
 #include "reply/Reply.hpp"
 

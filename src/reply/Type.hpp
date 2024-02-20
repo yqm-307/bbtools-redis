@@ -1,5 +1,5 @@
 #pragma once
-#include <bbt/type/type_traits.hpp>
+#include <bbt/base/type/type_traits.hpp>
 #include "Define.hpp"
 
 namespace bbt::database::redis::detail

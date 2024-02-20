@@ -1,5 +1,5 @@
 #pragma once
-#include <bbt/errcode/Errcode.hpp>
+#include <bbt/base/errcode/Errcode.hpp>
 #include <string>
 
 namespace bbt::database::redis::err
