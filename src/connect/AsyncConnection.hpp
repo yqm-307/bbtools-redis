@@ -6,7 +6,7 @@
 namespace bbt::database::redis
 {
 
-
+//TODO 改造为 libevent adapters
 class AsyncConnection:
     // public RedisConnection,
     public std::enable_shared_from_this<AsyncConnection>
