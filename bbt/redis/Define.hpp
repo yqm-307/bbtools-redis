@@ -8,7 +8,7 @@
 #include <optional>
 #include <memory>
 #include <hiredis/hiredis.h>
-#include "ErrCode.hpp"
+#include "bbt/redis/ErrCode.hpp"
 
 namespace bbt::database::redis
 {
@@ -23,6 +23,7 @@ class AsyncConnection;
 typedef err::RedisErr RedisErr;
 typedef std::optional<err::RedisErr> RedisErrOpt;
 typedef err::RedisErrType RedisErrType;
+typedef int64_t ConnId;
 
 struct Nil {};
 
@@ -46,13 +47,15 @@ enum ReplyType
 };
 
 /* RedisConnection 的事件函数原型 */
-typedef std::function<void()> RedisConnectionOnCloseCallback;
-typedef std::function<void()> RedisConnectionOnConnectCallback;
-typedef std::function<void()> RedisConnectionOnReadCallback;
-typedef std::function<void()> RedisConnectionOnWriteCallback;
-typedef std::function<void(std::shared_ptr<Reply>)> OnReplyCallback;    /* 异步执行cmd，获取result回调 */
+typedef std::function<void(RedisErrOpt, AsyncConnection*)>      OnCloseCallback;
+typedef std::function<void(RedisErrOpt, AsyncConnection*)>      OnConnectCallback;
+typedef std::function<void()>                                   OnReadCallback;
+typedef std::function<void()>                                   OnWriteCallback;
+typedef std::function<void(RedisErrOpt)>                        OnErrCallback; 
 
-typedef std::function<ssize_t(const char*, size_t)> IOWriteHandler;
-typedef std::function<ssize_t(const char*, size_t)> IOReadHandler;
+typedef std::function<void(RedisErrOpt, std::shared_ptr<Reply>)> OnReplyCallback;    /* 异步执行cmd，获取result回调 */
+
+typedef std::function<ssize_t(const char*, size_t)>             IOWriteHandler;
+typedef std::function<ssize_t(const char*, size_t)>             IOReadHandler;
 
 }

@@ -1,7 +1,7 @@
 #pragma once
 #include <bbt/base/net/IPAddress.hpp>
-#include "Define.hpp"
-#include "reply/Reply.hpp"
+#include "bbt/redis/Define.hpp"
+#include "bbt/redis/reply/Reply.hpp"
 
 namespace bbt::database::redis
 {

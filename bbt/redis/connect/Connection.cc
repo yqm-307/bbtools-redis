@@ -1,4 +1,4 @@
-#include "Connection.hpp"
+#include "bbt/redis/connect/Connection.hpp"
 
 namespace bbt::database::redis
 {
@@ -90,7 +90,7 @@ std::pair<RedisErrOpt, Reply::SPtr> Connection::__SyncExecCmdByString(const char
 std::pair<RedisErrOpt, Reply::SPtr> Connection::CheckReply(redisReply* reply)
 {
     if (reply == nullptr) {
-        return {RedisErr("reply is null!", err::RedisErrType::Comm_ParamIsNull), nullptr};
+        return {RedisErr("reply is null!", err::RedisErrType::Comm_ParamErr), nullptr};
     }
 
     if (reply->type == REDIS_REPLY_ERROR) {

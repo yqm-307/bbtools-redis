@@ -1,6 +1,6 @@
 #pragma once
 #include <bbt/base/type/type_traits.hpp>
-#include "Define.hpp"
+#include "bbt/redis/Define.hpp"
 
 namespace bbt::database::redis::detail
 {
