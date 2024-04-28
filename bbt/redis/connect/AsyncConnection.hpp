@@ -1,11 +1,6 @@
 #pragma once
-#include <memory>
-#include <hiredis/adapters/libevent.h>
-#include <bbt/base/net/IPAddress.hpp>
-#include <bbt/network/adapter/libevent/EventBase.hpp>
-#include <bbt/network/adapter/libevent/EventLoop.hpp>
-#include "bbt/redis/Define.hpp"
-#include "bbt/redis/connect/RedisConnection.hpp"
+#include "bbt/redis/connect/AsyncCommand.hpp"
+
 
 namespace bbt::database::redis
 {
@@ -24,7 +19,7 @@ class AsyncConnection:
     public std::enable_shared_from_this<AsyncConnection>
 {
 public:
-    static std::shared_ptr<AsyncConnection> Create(bbt::network::libevent::EventBase* io_ctx, OnErrCallback onerr_cb);
+    static std::shared_ptr<AsyncConnection> Create(std::weak_ptr<bbt::network::libevent::IOThread> thread, OnErrCallback onerr_cb);
     ~AsyncConnection();
 
     RedisErrOpt AsyncConnect(
@@ -49,7 +44,7 @@ public:
     RedisErrOpt SetCommandTimeout(int timeout);
     ConnId      GetConnId() const;
 protected:
-    explicit    AsyncConnection(bbt::network::libevent::EventBase* io_ctx, OnErrCallback onerr_cb);
+    explicit    AsyncConnection(std::weak_ptr<bbt::network::libevent::IOThread> thread, OnErrCallback onerr_cb);
     RedisErrOpt Connect();
 
     void        __InitPrivData();
@@ -63,13 +58,20 @@ protected:
         std::function<void(RedisErrOpt)> m_on_connect;
         std::function<void(RedisErrOpt)> m_on_close;
     };
+    /* libevent 事件抛出函数 */
+    void        OnEvent(short events);
+    /* AsyncCommand操作 */
+    bool        __PushAsyncCommand(std::unique_ptr<AsyncCommand>&& async_cmd);
+    std::vector<std::unique_ptr<AsyncCommand>> __GetAsyncCommands();
 
+    /* cfunc wapper */
     static void __CFuncOnConnect(const redisAsyncContext* ctx, int status);
     static void __CFuncOnClose(const redisAsyncContext* ctx, int status);
     static void __OnReply(redisAsyncContext* ctx, void* rpy, void* udata);
 
 private:
-    std::shared_ptr<bbt::network::libevent::EventBase> m_io_ctx{nullptr};
+    // std::shared_ptr<bbt::network::libevent::EventBase> m_io_ctx{nullptr};
+    std::shared_ptr<bbt::network::libevent::IOThread>  m_io_thread{nullptr};
     AsyncConnectionPrivData     m_priv_data{nullptr};
     redisAsyncContext*          m_raw_async_ctx{nullptr};
     redisContextFuncs           m_io_funcs;
@@ -78,6 +80,10 @@ private:
     struct timeval              m_connect_timeout;  // connect() 超时时间
     struct timeval              m_command_timeout;  // 执行指令，超时时间
     volatile bool               m_is_connected{false};
+
+    bbt::thread::Queue<std::unique_ptr<AsyncCommand>, 65535> 
+                                m_lock_free_command_queue;
+    std::shared_ptr<bbt::network::libevent::Event> m_event;
 
     OnConnectCallback           m_on_connect_handler{nullptr};
     IOWriteHandler              m_write_handler{nullptr};

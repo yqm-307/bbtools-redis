@@ -8,9 +8,9 @@ namespace bbt::database::redis
 
 ConnId AsyncConnection::m_current_id = 1;
 
-std::shared_ptr<AsyncConnection> AsyncConnection::Create(bbt::network::libevent::EventBase* io_ctx, OnErrCallback onerr_cb)
+std::shared_ptr<AsyncConnection> AsyncConnection::Create(std::weak_ptr<bbt::network::libevent::IOThread> thread, OnErrCallback onerr_cb)
 {
-    return std::shared_ptr<AsyncConnection>(new AsyncConnection(io_ctx, onerr_cb));
+    return std::shared_ptr<AsyncConnection>(new AsyncConnection(thread, onerr_cb));
 }
 
 
@@ -69,12 +69,11 @@ void AsyncConnection::__OnReply(redisAsyncContext* ctx, void* rpy, void* udata)
 }
 
 
-AsyncConnection::AsyncConnection(bbt::network::libevent::EventBase* io_ctx, OnErrCallback onerr_cb):
-    m_io_ctx(io_ctx),
+AsyncConnection::AsyncConnection(std::weak_ptr<bbt::network::libevent::IOThread> thread, OnErrCallback onerr_cb):
+    m_io_thread(thread),
     m_conn_id(m_current_id++),
     m_on_err_handler(onerr_cb)
 {
-    Assert(io_ctx != nullptr);
 }
 
 AsyncConnection::~AsyncConnection()
@@ -90,6 +89,7 @@ RedisErrOpt AsyncConnection::AsyncConnect(
     OnConnectCallback   onconn_cb,
     OnCloseCallback     onclose_cb)
 {
+    using namespace bbt::network::libevent;
     m_on_connect_handler = onconn_cb;
     m_on_close_handler = onclose_cb;
 
@@ -132,10 +132,10 @@ RedisErrOpt AsyncConnection::Connect()
     } else if (m_raw_async_ctx->err != 0) {
         return RedisErr(m_raw_async_ctx->errstr, RedisErrType::ConnectionFailed);
     }
-
-    if (redisLibeventAttach(m_raw_async_ctx, m_io_ctx->m_io_context) != REDIS_OK) {
+    
+    event_base* base = m_io_thread->GetEventLoop()->GetEventBase()->m_io_context;
+    if (redisLibeventAttach(m_raw_async_ctx, base) != REDIS_OK)
         return RedisErr(m_raw_async_ctx->errstr, RedisErrType::ConnectionFailed);
-    }
 
     if (redisAsyncSetConnectCallback(m_raw_async_ctx, __CFuncOnConnect) != REDIS_OK)
         return RedisErr(m_raw_async_ctx->errstr, RedisErrType::ConnectionFailed);
@@ -171,6 +171,9 @@ RedisErrOpt AsyncConnection::Disconnect()
     if (!IsConnected())
         return std::nullopt;
 
+    if (m_event)
+        m_event->CancelListen();
+
     redisAsyncDisconnect(m_raw_async_ctx);
     redisAsyncFree(m_raw_async_ctx);
     m_raw_async_ctx = nullptr;
@@ -193,12 +196,8 @@ RedisErrOpt AsyncConnection::AsyncExecCmd(const std::string& command, const OnRe
     if (command.empty())
         return RedisErr("command is empty", RedisErrType::Comm_ParamErr);
 
-    auto context = new CommandContext();
-    context->redis_connection = std::move(weak_from_this());
-    context->on_reply_handler = cb;
-
-    //TODO 解析errcode
-    int redis_err = redisAsyncCommand(m_raw_async_ctx, &AsyncConnection::__OnReply, (void*)context, command.c_str());
+    if (!__PushAsyncCommand(std::make_unique<AsyncCommand>(weak_from_this(), cb)))
+        return RedisErr("push command failed! please try again!", RedisErrType::Comm_TryAgain); 
 
     return std::nullopt;
 }
@@ -233,6 +232,8 @@ RedisErrOpt AsyncConnection::SetCommandTimeout(int timeout)
 
 void AsyncConnection::OnConnect(RedisErrOpt err)
 {
+    using namespace bbt::network::libevent;
+
     m_is_connected = true;
     if (m_on_connect_handler == nullptr) {
         OnError(RedisErr("no set on connect handle!", RedisErrType::Comm_ParamErr));
@@ -240,6 +241,14 @@ void AsyncConnection::OnConnect(RedisErrOpt err)
     }
 
     m_on_connect_handler(err, this);
+
+    auto weak_ptr = weak_from_this();
+    m_event = m_io_thread->RegisterEvent(-1, EventOpt::PERSIST, [weak_ptr](std::shared_ptr<Event>, short events){
+        auto pthis = weak_ptr.lock();
+        if (!pthis) return;
+        pthis->OnEvent(events);
+    });
+
 }
 
 void AsyncConnection::OnError(RedisErrOpt err)
@@ -259,6 +268,26 @@ void AsyncConnection::OnClose(RedisErrOpt err)
     m_on_close_handler(err, this);
 }
 
+bool AsyncConnection::__PushAsyncCommand(std::unique_ptr<AsyncCommand>&& async_cmd)
+{
+    return m_lock_free_command_queue.Push(async_cmd);
+}
+
+std::vector<std::unique_ptr<AsyncCommand>> AsyncConnection::__GetAsyncCommands()
+{
+    std::vector<std::unique_ptr<AsyncCommand>> async_commands;
+
+    do {
+        async_commands.push_back(nullptr);
+    } while(m_lock_free_command_queue.Pop(async_commands.back()));
+    async_commands.pop_back();
+
+    return async_commands;
+}
+
+void AsyncConnection::OnEvent(short events)
+{
+}
 
 
 } // namespace bbt::database::redis
