@@ -9,6 +9,7 @@
 #include <bbt/network/adapter/libevent/EventBase.hpp>
 #include <bbt/network/adapter/libevent/EventLoop.hpp>
 #include <bbt/network/adapter/libevent/Event.hpp>
+#include <bbt/network/adapter/libevent/Network.hpp>
 #include "bbt/redis/Define.hpp"
 #include "bbt/redis/connect/RedisConnection.hpp"
 
@@ -17,12 +18,14 @@ namespace bbt::database::redis
 
 class AsyncCommand
 {
+    friend class AsyncConnection;
 public:
-    AsyncCommand(std::weak_ptr<AsyncConnection> connection, OnReplyCallback cb);
+    AsyncCommand(std::weak_ptr<AsyncConnection> connection, std::string&& cmd, OnReplyCallback cb);
     ~AsyncCommand();
 
     void OnReply(RedisErrOpt err, std::shared_ptr<Reply> reply);
-
+private:
+    RedisErrOpt DoCommand(redisAsyncContext* context, redisCallbackFn* fn);
 private:
     std::weak_ptr<AsyncConnection> m_connection;
     std::string     m_cmd;

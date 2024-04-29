@@ -47,25 +47,21 @@ void AsyncConnection::__CFuncOnClose(const redisAsyncContext* ctx, int status)
 
 void AsyncConnection::__OnReply(redisAsyncContext* ctx, void* rpy, void* udata)
 {
-    /*
-        reply 由hiredis申请，由本库负责释放
-        udata 也由本库负责释放
-    */
-    auto* context = static_cast<CommandContext*>(udata);
+    /**
+     * hiredis 传入的reply由Reply接管，Reply对象释放时释放内存，并使用shared_ptr管理Reply对象
+     */
+    auto* async_command = static_cast<AsyncCommand*>(udata);
     auto* reply = static_cast<redisReply*>(rpy);
 
-    auto conn_ptr = context->redis_connection.lock();
-    if (conn_ptr != nullptr && context->on_reply_handler) {
-        if (ctx->err) {
-            context->on_reply_handler(RedisErr(ctx->errstr, RedisErrType::Reply_Err), nullptr);
-        } else {
-            auto reply_sptr = (reply == nullptr) ? nullptr : std::make_shared<Reply>(reply);
-            context->on_reply_handler(std::nullopt, reply_sptr);
-        }
+    if (ctx->err) {
+        async_command->OnReply(RedisErr(ctx->errstr, RedisErrType::Reply_Err), nullptr);
+    } else {
+        auto reply_sptr = (reply == nullptr) ? nullptr : std::make_shared<Reply>(reply);
+        async_command->OnReply(std::nullopt, reply_sptr);
     }
 
-    /* 执行后，释放掉我们执行操作时申请的udata */
-    delete context;
+    /* 回调执行完毕，释放对象 */
+    delete async_command;
 }
 
 
@@ -79,6 +75,13 @@ AsyncConnection::AsyncConnection(std::weak_ptr<bbt::network::libevent::IOThread>
 AsyncConnection::~AsyncConnection()
 {
     Disconnect();
+}
+
+void AsyncConnection::DestoryAllAsyncCommand()
+{
+    auto commands = __GetAsyncCommands();
+    for (auto&& command_ptr : commands)
+        delete command_ptr;
 }
 
 RedisErrOpt AsyncConnection::AsyncConnect(
@@ -171,9 +174,7 @@ RedisErrOpt AsyncConnection::Disconnect()
     if (!IsConnected())
         return std::nullopt;
 
-    if (m_event)
-        m_event->CancelListen();
-
+    UnRegistWriteEvent();
     redisAsyncDisconnect(m_raw_async_ctx);
     redisAsyncFree(m_raw_async_ctx);
     m_raw_async_ctx = nullptr;
@@ -191,13 +192,15 @@ void AsyncConnection::Close()
 }
 
 
-RedisErrOpt AsyncConnection::AsyncExecCmd(const std::string& command, const OnReplyCallback& cb)
+RedisErrOpt AsyncConnection::AsyncExecCmd(std::string&& command, const OnReplyCallback& cb)
 {
     if (command.empty())
         return RedisErr("command is empty", RedisErrType::Comm_ParamErr);
 
-    if (!__PushAsyncCommand(std::make_unique<AsyncCommand>(weak_from_this(), cb)))
-        return RedisErr("push command failed! please try again!", RedisErrType::Comm_TryAgain); 
+    if (!__PushAsyncCommand(new AsyncCommand(weak_from_this(), std::move(command), cb)))
+        return RedisErr("push command failed! please try again!", RedisErrType::Comm_TryAgain);
+    
+    RegistWriteEvent();
 
     return std::nullopt;
 }
@@ -232,8 +235,6 @@ RedisErrOpt AsyncConnection::SetCommandTimeout(int timeout)
 
 void AsyncConnection::OnConnect(RedisErrOpt err)
 {
-    using namespace bbt::network::libevent;
-
     m_is_connected = true;
     if (m_on_connect_handler == nullptr) {
         OnError(RedisErr("no set on connect handle!", RedisErrType::Comm_ParamErr));
@@ -241,14 +242,6 @@ void AsyncConnection::OnConnect(RedisErrOpt err)
     }
 
     m_on_connect_handler(err, this);
-
-    auto weak_ptr = weak_from_this();
-    m_event = m_io_thread->RegisterEvent(-1, EventOpt::PERSIST, [weak_ptr](std::shared_ptr<Event>, short events){
-        auto pthis = weak_ptr.lock();
-        if (!pthis) return;
-        pthis->OnEvent(events);
-    });
-
 }
 
 void AsyncConnection::OnError(RedisErrOpt err)
@@ -268,14 +261,14 @@ void AsyncConnection::OnClose(RedisErrOpt err)
     m_on_close_handler(err, this);
 }
 
-bool AsyncConnection::__PushAsyncCommand(std::unique_ptr<AsyncCommand>&& async_cmd)
+bool AsyncConnection::__PushAsyncCommand(AsyncCommand* async_cmd)
 {
     return m_lock_free_command_queue.Push(async_cmd);
 }
 
-std::vector<std::unique_ptr<AsyncCommand>> AsyncConnection::__GetAsyncCommands()
+std::vector<AsyncCommand*> AsyncConnection::__GetAsyncCommands()
 {
-    std::vector<std::unique_ptr<AsyncCommand>> async_commands;
+    std::vector<AsyncCommand*> async_commands;
 
     do {
         async_commands.push_back(nullptr);
@@ -287,7 +280,53 @@ std::vector<std::unique_ptr<AsyncCommand>> AsyncConnection::__GetAsyncCommands()
 
 void AsyncConnection::OnEvent(short events)
 {
+    auto commands = __GetAsyncCommands();
+    UnRegistWriteEvent();
+
+    for (auto&& command : commands) {
+        auto err = command->DoCommand(m_raw_async_ctx, AsyncConnection::__OnReply);
+        if (err != std::nullopt)
+            OnError(err);
+    }
 }
 
+void AsyncConnection::RegistWriteEvent()
+{
+    using namespace bbt::network::libevent;
+    bool is_writing = false;
+    /* 如果 m_is_writing 是 false，则修改为true，并发挥true；否则返回false，不做修改 */
+    if (!m_is_writing.compare_exchange_strong(is_writing, true))
+        return;
+
+    //XXX 观察后续去除
+    AssertWithInfo(m_write_event == nullptr, "multi thread order problem!");
+    if (m_write_event != nullptr)
+        return;
+    
+    auto weak_ptr = weak_from_this();
+    Assert(!weak_ptr.expired());
+    m_write_event = m_io_thread->RegisterEvent(-1, EventOpt::PERSIST, [weak_ptr](std::shared_ptr<Event>, short events){
+        auto pthis = weak_ptr.lock();
+        if (!pthis) return;
+        pthis->OnEvent(events);
+    });
+
+    auto err = m_write_event->StartListen(5);
+    if (!err)
+        OnError(RedisErr("listen event failed!", RedisErrType::Comm_UnDefErr));
+}
+
+void AsyncConnection::UnRegistWriteEvent()
+{
+    if (m_is_writing)
+        return;
+
+    if (m_write_event)
+        m_write_event->CancelListen();
+
+    m_write_event = nullptr;
+
+    m_is_writing.exchange(false);
+}
 
 } // namespace bbt::database::redis

@@ -31,7 +31,7 @@ public:
         OnCloseCallback     onclose_cb);
 
     /* 执行异步指令 */
-    RedisErrOpt AsyncExecCmd(const std::string& command, const OnReplyCallback& cb);
+    RedisErrOpt AsyncExecCmd(std::string&& command, const OnReplyCallback& cb);
 
     /* 连接 */
     RedisErrOpt Reconnect();
@@ -61,8 +61,11 @@ protected:
     /* libevent 事件抛出函数 */
     void        OnEvent(short events);
     /* AsyncCommand操作 */
-    bool        __PushAsyncCommand(std::unique_ptr<AsyncCommand>&& async_cmd);
-    std::vector<std::unique_ptr<AsyncCommand>> __GetAsyncCommands();
+    bool        __PushAsyncCommand(AsyncCommand* async_cmd);
+    std::vector<AsyncCommand*> __GetAsyncCommands();
+    void        DestoryAllAsyncCommand();
+    void        RegistWriteEvent();
+    void        UnRegistWriteEvent();
 
     /* cfunc wapper */
     static void __CFuncOnConnect(const redisAsyncContext* ctx, int status);
@@ -81,9 +84,12 @@ private:
     struct timeval              m_command_timeout;  // 执行指令，超时时间
     volatile bool               m_is_connected{false};
 
-    bbt::thread::Queue<std::unique_ptr<AsyncCommand>, 65535> 
+    bbt::thread::Queue<AsyncCommand*, 65535> 
                                 m_lock_free_command_queue;
-    std::shared_ptr<bbt::network::libevent::Event> m_event;
+    std::shared_ptr<bbt::network::libevent::Event> 
+                                m_write_event{nullptr};
+    std::mutex                  m_write_event_mutex;
+    std::atomic_bool            m_is_writing{false};
 
     OnConnectCallback           m_on_connect_handler{nullptr};
     IOWriteHandler              m_write_handler{nullptr};

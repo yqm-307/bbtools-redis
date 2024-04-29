@@ -2,6 +2,8 @@
 #include "bbt/redis/reply/Reply.hpp"
 using namespace bbt::database::redis;
 
+std::atomic_int num = 0;
+
 void OnConnect(AsyncConnection* conn)
 {
     conn->AsyncExecCmd("SET field1 10", nullptr);
@@ -20,11 +22,36 @@ void OnConnect(AsyncConnection* conn)
     });
 }
 
+void Thread(AsyncConnection* conn)
+{
+    for (int j = 0; j < 5; ++j)
+    {
+        for (int i = 0; i < 10000; ++i) {
+
+            conn->AsyncExecCmd("GET field1", [conn](RedisErrOpt err, std::shared_ptr<Reply> reply){
+                if (err != std::nullopt) {
+                    perror(err.value().CWhat());
+                    return;
+                }
+
+                std::string value;
+                auto err1 = reply->Transform(value);
+                if (err1 != std::nullopt)
+                    perror(err1.value().CWhat());
+
+                conn->AsyncExecCmd("SET field1 " + std::to_string(std::stoi(value) + 1), nullptr);
+            });
+        }
+        std::this_thread::sleep_until(bbt::timer::clock::nowAfter(bbt::timer::clock::seconds(1)));
+    }    
+}
+
+
 int main()
 {
-    auto* base = new bbt::network::libevent::EventBase();
-    auto* loop = new bbt::network::libevent::EventLoop(base);
-    auto  conn = AsyncConnection::Create(base, [](bbt::database::redis::RedisErrOpt err){
+    auto thread = std::make_shared<bbt::network::libevent::IOThread>();
+
+    auto  conn = AsyncConnection::Create(thread, [](bbt::database::redis::RedisErrOpt err){
         perror(err.value().CWhat());
     });
 
@@ -37,6 +64,9 @@ int main()
     },
     [](auto _, AsyncConnection* conn){});
 
-    loop->StartLoop(bbt::network::libevent::EventLoopOpt::LOOP_NO_EXIT_ON_EMPTY);
+    // loop->StartLoop(bbt::network::libevent::EventLoopOpt::LOOP_NO_EXIT_ON_EMPTY);
+    thread->Start();
+
+    sleep(10);
     return 0;
 }
