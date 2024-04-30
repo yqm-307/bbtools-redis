@@ -2,9 +2,10 @@
 #include "bbt/redis/reply/Reply.hpp"
 using namespace bbt::database::redis;
 
-std::atomic_int num = 0;
-std::atomic_int total_send = 0;
-std::atomic_int send_err = 0;
+std::atomic_int64_t num = 0;
+std::atomic_int64_t total_send = 0;
+std::atomic_int64_t send_err = 0;
+std::atomic_bool    thread_running = true;
 
 void OnConnect(AsyncConnection* conn)
 {
@@ -27,9 +28,9 @@ void OnConnect(AsyncConnection* conn)
 /* 测试案例发送线程 */
 void Thread(std::shared_ptr<AsyncConnection> conn)
 {
-    for (int j = 0; j < 5; ++j)
+    while (thread_running)
     {
-        for (int i = 0; i < 10000; ++i) {
+        for (int i = 0; i < 1000; ++i) {
             /* 发起redis异步指令 */
             auto err = conn->AsyncExecCmd("GET field1", [conn](RedisErrOpt err, std::shared_ptr<Reply> reply){
                 if (err != std::nullopt) {
@@ -43,7 +44,8 @@ void Thread(std::shared_ptr<AsyncConnection> conn)
                     perror(err1.value().CWhat());
 
                 conn->AsyncExecCmd("SET field1 " + std::to_string(std::stoi(value) + 1), nullptr);
-                printf("get value=%s, num = %d\n", value.c_str(), num++);
+                num++;
+                // printf("get value=%s, num = %ld\n", value.c_str(), num++);
             });
 
             /* 测试计数 */
@@ -53,14 +55,15 @@ void Thread(std::shared_ptr<AsyncConnection> conn)
                 total_send++;
         }
         std::this_thread::sleep_until(bbt::timer::clock::nowAfter(bbt::timer::clock::seconds(1)));
-    }    
+    }
 }
 
 
-int main()
+int main(int argc, char* argv[])
 {
     /* 通过make_shared申请一个自动gc对象 */
     auto thread = std::make_shared<bbt::network::libevent::IOThread>();
+    std::vector<std::thread*> threads{10};
 
     /* 创建一个AsyncConnect对象 */
     auto  conn = AsyncConnection::Create(thread, [](bbt::database::redis::RedisErrOpt err){
@@ -68,8 +71,9 @@ int main()
     });
 
     /* 创建一个线程，入参是线程运行时函数 */
-    auto thread1 = new std::thread([=](){ Thread(conn); });
-    auto thread2 = new std::thread([=](){ Thread(conn); });
+    for (int i = 0; i < threads.size(); ++i) {
+        threads[i] = new std::thread([=](){ Thread(conn); });
+    }
 
     /* 发起一个异步连接 */
     conn->AsyncConnect(
@@ -93,14 +97,16 @@ int main()
     thread->Start();
 
     /* 主线程休眠 */
-    sleep(10);
+    sleep(120);
+    thread_running.exchange(false);
 
     /* 归还线程资源 */
     thread->Stop();
-    if (thread1->joinable())
-        thread1->join();
-    if (thread2->joinable())
-        thread2->join();
-    printf("total=%d err=%d\n", total_send.load(), send_err.load());
+    for (auto&& thread : threads)  {
+        if (thread->joinable())
+            thread->join();
+    }
+
+    printf("total=%ld err=%ld onreply:%ld\n", total_send.load(), send_err.load(), num.load());
     return 0;
 }

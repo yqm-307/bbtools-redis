@@ -16,4 +16,5 @@ target_link_libraries(AsyncConnectTest
 add_executable(AsyncConnectLibevent AsyncConnect.cc)
 target_link_libraries(AsyncConnectLibevent 
     bbt_redis
+    tcmalloc
 )
