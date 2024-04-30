@@ -19,9 +19,27 @@ class AsyncConnection:
     public std::enable_shared_from_this<AsyncConnection>
 {
 public:
+    /**
+     * @brief 创建一个自动gc的AsyncConnection对象
+     * 
+     * @param thread 连接运行的线程
+     * @param onerr_cb 错误抛出函数
+     * @return std::shared_ptr<AsyncConnection> 
+     */
     static std::shared_ptr<AsyncConnection> Create(std::weak_ptr<bbt::network::libevent::IOThread> thread, OnErrCallback onerr_cb);
     ~AsyncConnection();
 
+    /**
+     * @brief 发起一个异步连接
+     * 
+     * @param ip 
+     * @param port 
+     * @param connect_timeout 连接建立超时时间
+     * @param command_timeout 指令执行的超时时间
+     * @param onconn_cb 连接建立成功的回调事件
+     * @param onclose_cb 连接关闭时的回调事件
+     * @return RedisErrOpt 
+     */
     RedisErrOpt AsyncConnect(
         const std::string&  ip,
         short               port,
