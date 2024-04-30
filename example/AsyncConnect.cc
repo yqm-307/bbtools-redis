@@ -3,6 +3,8 @@
 using namespace bbt::database::redis;
 
 std::atomic_int num = 0;
+std::atomic_int total_send = 0;
+std::atomic_int send_err = 0;
 
 void OnConnect(AsyncConnection* conn)
 {
@@ -22,13 +24,13 @@ void OnConnect(AsyncConnection* conn)
     });
 }
 
-void Thread(AsyncConnection* conn)
+void Thread(std::shared_ptr<AsyncConnection> conn)
 {
     for (int j = 0; j < 5; ++j)
     {
         for (int i = 0; i < 10000; ++i) {
 
-            conn->AsyncExecCmd("GET field1", [conn](RedisErrOpt err, std::shared_ptr<Reply> reply){
+            auto err = conn->AsyncExecCmd("GET field1", [conn](RedisErrOpt err, std::shared_ptr<Reply> reply){
                 if (err != std::nullopt) {
                     perror(err.value().CWhat());
                     return;
@@ -40,7 +42,12 @@ void Thread(AsyncConnection* conn)
                     perror(err1.value().CWhat());
 
                 conn->AsyncExecCmd("SET field1 " + std::to_string(std::stoi(value) + 1), nullptr);
+                printf("get value=%s, num = %d\n", value.c_str(), num++);
             });
+            if (err != std::nullopt)
+                send_err++;
+            else
+                total_send++;
         }
         std::this_thread::sleep_until(bbt::timer::clock::nowAfter(bbt::timer::clock::seconds(1)));
     }    
@@ -51,9 +58,13 @@ int main()
 {
     auto thread = std::make_shared<bbt::network::libevent::IOThread>();
 
+
     auto  conn = AsyncConnection::Create(thread, [](bbt::database::redis::RedisErrOpt err){
         perror(err.value().CWhat());
     });
+
+    auto thread1 = new std::thread([=](){ Thread(conn); });
+    auto thread2 = new std::thread([=](){ Thread(conn); });
 
     conn->AsyncConnect("127.0.0.1", 6379, 2000, 5000,
     [](RedisErrOpt err, AsyncConnection* conn){ 
@@ -68,5 +79,12 @@ int main()
     thread->Start();
 
     sleep(10);
+
+    thread->Stop();
+    if (thread1->joinable())
+        thread1->join();
+    if (thread2->joinable())
+        thread2->join();
+    printf("total=%d err=%d\n", total_send.load(), send_err.load());
     return 0;
 }
