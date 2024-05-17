@@ -1,5 +1,8 @@
 #pragma once
-#include "bbt/redis/connect/AsyncCommand.hpp"
+#include <bbt/network/adapter/libevent/LibeventConnection.hpp>
+#include <bbt/redis/connect/AsyncCommand.hpp>
+#include <bbt/redis/connect/RedisOption.hpp>
+
 
 
 namespace bbt::database::redis
@@ -15,7 +18,7 @@ struct CommandContext
 
 //TODO 改造为 libevent adapters
 class AsyncConnection:
-    // public RedisConnection,
+    public bbt::network::libevent::LibeventConnection,
     public std::enable_shared_from_this<AsyncConnection>
 {
 public:
@@ -66,8 +69,8 @@ protected:
     RedisErrOpt Connect();
 
     void        __InitPrivData();
-    void        OnConnect(RedisErrOpt err);
     void        OnError(RedisErrOpt err);
+    void        OnConnect(RedisErrOpt err);
     void        OnClose(RedisErrOpt err);
 
     /* 私有数据 */

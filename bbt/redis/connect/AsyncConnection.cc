@@ -66,6 +66,7 @@ void AsyncConnection::__OnReply(redisAsyncContext* ctx, void* rpy, void* udata)
 
 
 AsyncConnection::AsyncConnection(std::weak_ptr<bbt::network::libevent::IOThread> thread, OnErrCallback onerr_cb):
+    bbt::network::libevent::LibeventConnection(thread)
     m_io_thread(thread),
     m_conn_id(m_current_id++),
     m_on_err_handler(onerr_cb)

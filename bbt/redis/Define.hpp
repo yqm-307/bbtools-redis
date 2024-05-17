@@ -8,6 +8,7 @@
 #include <optional>
 #include <memory>
 #include <hiredis/hiredis.h>
+#include <hiredis/adapters/libevent.h>
 #include "bbt/redis/ErrCode.hpp"
 
 namespace bbt::database::redis

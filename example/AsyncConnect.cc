@@ -62,7 +62,7 @@ void Thread(std::shared_ptr<AsyncConnection> conn)
 int main(int argc, char* argv[])
 {
     /* 通过make_shared申请一个自动gc对象 */
-    auto thread = std::make_shared<bbt::network::libevent::IOThread>();
+    auto thread = std::make_shared<bbt::network::libevent::IOThread>(std::make_shared<bbt::network::libevent::EventLoop>());
     std::vector<std::thread*> threads{10};
 
     /* 创建一个AsyncConnect对象 */
