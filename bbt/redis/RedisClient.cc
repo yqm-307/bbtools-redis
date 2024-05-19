@@ -36,7 +36,7 @@ RedisErrOpt RedisClient::AsyncConnect(
 {
     using namespace bbt::network::libevent;
 
-    RedisOption opt;
+    RedisOption opt{network.GetAIOThread()};
 
     if (connect_timeout <= 0)
         return RedisErr{"connect timeout less then 0!", RedisErrType::Comm_ParamErr};
@@ -52,6 +52,7 @@ RedisErrOpt RedisClient::AsyncConnect(
     opt.SetConnectTimeout(connect_timeout);
     opt.SetCommandTimeout(command_timeout);    
 
+    Connect(opt);
 }
 
 void RedisClient::OnError(const RedisErr& err)
@@ -59,5 +60,15 @@ void RedisClient::OnError(const RedisErr& err)
     // 初始化已完成检测
     m_on_error(err);
 }
+
+void RedisClient::Connect(RedisOption& opt)
+{
+    redisAsyncContext* context = opt.Connect();
+    if (context != context)
+        return;
+
+    
+}
+
 
 }

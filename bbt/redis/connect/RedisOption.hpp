@@ -17,6 +17,8 @@ public:
     void SetTCP(const char* ip, short port);
     void SetOnConnect(const OnConnectCallback& on_conn_cb);
     void SetOnClose(const OnCloseCallback& on_close_cb);
+
+    redisAsyncContext* Connect();
 protected:
     /* cfunc wapper */
     static void __CFuncOnConnect(const redisAsyncContext* ctx, int status);
@@ -27,9 +29,9 @@ private:
                         m_conn_bind_thread;
     timeval             m_connect_timeout;
     timeval             m_command_timeout;
+    redisAsyncContext*  m_context;
     redisOptions        m_raw_redis_option;
     std::function<void(std::shared_ptr<AsyncConnection>, RedisErrOpt)> m_on_connect;
-
     std::function<void(RedisErrOpt)> m_on_close;
 };
 

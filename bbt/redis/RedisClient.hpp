@@ -23,6 +23,7 @@ protected:
     void Connect(RedisOption& opt);
     void OnError(const RedisErr& err);
 private:
+    std::unordered_map<bbt::net::IPAddress, RedisOption> m_redis_options_map;
     OnErrCallback   m_on_error{nullptr};
 };
 

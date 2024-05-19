@@ -76,14 +76,17 @@ void RedisOption::SetTCP(const char* ip, short port)
 
 void RedisOption::SetOnConnect(const OnConnectCallback& on_conn_cb)
 {
-    m_priv_data.m_on_connect = [this](RedisErrOpt err){
-        this->
-    };
+    m_on_connect = on_conn_cb;
 }
 
 void RedisOption::SetOnClose(const OnCloseCallback& on_close_cb)
 {
 
+}
+
+redisAsyncContext* RedisOption::Connect()
+{
+    m_raw_redis_option = redisAsyncConnectWithOptions(&m_raw_redis_option);
 }
 
 }
