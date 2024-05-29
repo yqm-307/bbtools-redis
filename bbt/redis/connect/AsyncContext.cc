@@ -12,10 +12,17 @@ do { \
 namespace bbt::database::redis
 {
 
-AsyncContext::AsyncContext(bbt::network::libevent::Network network)
+AsyncContext::SPtr AsyncContext::Create(bbt::network::libevent::Network network, const bbt::errcode::OnErrorCallback& cb)
+{
+    return std::make_shared<AsyncContext>(network, cb);
+}
+
+
+AsyncContext::AsyncContext(bbt::network::libevent::Network network, const bbt::errcode::OnErrorCallback& cb):
+    m_on_error_callback(cb)
 {
     memset(&m_redis_option,     '\0',   sizeof(m_redis_option));
-    memset(&m_redis_context,        '\0',   sizeof(m_redis_context));
+    memset(&m_redis_context,    '\0',   sizeof(m_redis_context));
 }
 
 AsyncContext::~AsyncContext()
@@ -96,10 +103,12 @@ void AsyncContext::__CFuncOnConnect(const redisAsyncContext* context, int status
 
     auto new_redis_conn = AsyncConnection::Create(pthis->m_conn_bind_thread, [=](RedisErrOpt err){ OnErrCallback(err); });
     if (status == REDIS_OK) {
-        pthis->m_on_connect();
+        pthis->m_on_connect_callback(new_redis_conn, std::nullopt);
     } else {
-
+        pthis->m_on_connect_callback(nullptr, RedisErr{context->errstr, RedisErrType::ConnectionFailed});
     }
+
+    
 }
 
 void AsyncContext::__CFuncOnClose(const redisAsyncContext* context, int status)

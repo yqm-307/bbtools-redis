@@ -84,9 +84,25 @@ void RedisOption::SetOnClose(const OnCloseCallback& on_close_cb)
 
 }
 
-redisAsyncContext* RedisOption::Connect()
+RedisErrOpt RedisOption::Connect()
 {
-    m_raw_redis_option = redisAsyncConnectWithOptions(&m_raw_redis_option);
+    m_context = redisAsyncConnectWithOptions(&m_raw_redis_option);
+
+    auto thread_sptr = m_conn_bind_thread.lock();
+    if (thread_sptr == nullptr)
+        return RedisErr{"bind thread is null!", RedisErrType::ConnectionFailed};
+
+    auto base = thread_sptr->GetEventLoop()->GetEventBase()->GetRawBase();
+    if (redisLibeventAttach(m_context, base) != REDIS_OK)
+        return RedisErr{m_context->errstr, RedisErrType::ConnectionFailed};
+
+    if (redisAsyncSetConnectCallback(m_context, __CFuncOnConnect) != REDIS_OK)
+        return RedisErr{m_context->errstr, RedisErrType::ConnectionFailed};
+    
+    if (redisAsyncSetDisconnectCallback(m_context, __CFuncOnClose) != REDIS_OK)
+        return RedisErr{m_context->errstr, RedisErrType::ConnectionFailed};
+    
+    return std::nullopt;
 }
 
 }

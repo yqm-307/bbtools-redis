@@ -18,7 +18,7 @@ public:
     void SetOnConnect(const OnConnectCallback& on_conn_cb);
     void SetOnClose(const OnCloseCallback& on_close_cb);
 
-    redisAsyncContext* Connect();
+    RedisErrOpt Connect();
 protected:
     /* cfunc wapper */
     static void __CFuncOnConnect(const redisAsyncContext* ctx, int status);

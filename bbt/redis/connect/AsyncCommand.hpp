@@ -11,7 +11,6 @@
 #include <bbt/network/adapter/libevent/Event.hpp>
 #include <bbt/network/adapter/libevent/Network.hpp>
 #include "bbt/redis/Define.hpp"
-#include "bbt/redis/connect/RedisConnection.hpp"
 
 namespace bbt::database::redis
 {
