@@ -1,5 +1,10 @@
+#include <bbt/base/hash/Hash.hpp>
 #include "bbt/redis/connect/AsyncConnection.hpp"
 #include "bbt/redis/reply/Reply.hpp"
+#include "bbt/redis/RedisClient.hpp"
+#include "bbt/network/adapter/libevent/Network.hpp"
+#include "bbt/base/clock/Clock.hpp"
+
 using namespace bbt::database::redis;
 
 std::atomic_int64_t num = 0;
@@ -58,55 +63,34 @@ void Thread(std::shared_ptr<AsyncConnection> conn)
     }
 }
 
+void Test1()
+{
+    bbt::network::libevent::Network network;
+    RedisClient client{[](RedisErrOpt opt){
+        perror(opt.value().CWhat());
+    }};
+
+    auto err = client.AsyncConnect(network, "127.0.0.1", 6379, 3000, 3000,
+    [](RedisErrOpt error, std::shared_ptr<AsyncConnection> conn)
+    {
+        printf("新连接完成!\n");
+    },
+    [](RedisErrOpt, bbt::net::IPAddress addr)
+    {
+        printf("连接关闭! %s\n", addr.GetIPPort().c_str());
+    });
+
+    if (err != std::nullopt) {
+        printf("建立连接发生错误 %s\n", err.value().CWhat());
+        return;
+    }
+
+    std::this_thread::sleep_for(bbt::clock::seconds(2));
+}
 
 int main(int argc, char* argv[])
 {
     /* 通过make_shared申请一个自动gc对象 */
-    auto thread = std::make_shared<bbt::network::libevent::IOThread>(std::make_shared<bbt::network::libevent::EventLoop>());
-    std::vector<std::thread*> threads{10};
+    Test1();
 
-    /* 创建一个AsyncConnect对象 */
-    auto  conn = AsyncConnection::Create(thread, [](bbt::database::redis::RedisErrOpt err){
-        perror(err.value().CWhat());
-    });
-
-    /* 创建一个线程，入参是线程运行时函数 */
-    for (int i = 0; i < threads.size(); ++i) {
-        threads[i] = new std::thread([=](){ Thread(conn); });
-    }
-
-    /* 发起一个异步连接 */
-    conn->AsyncConnect(
-        "127.0.0.1",
-        6379,
-        2000,
-        5000,
-        /* 连接建立完成的回调 */
-        [](RedisErrOpt err, AsyncConnection* conn){ 
-            if (err != std::nullopt) {
-                printf("%s\n", err.value().CWhat());
-            }
-            OnConnect(conn);
-        },
-        /* 连接关闭时的回调 */
-        [](auto _, AsyncConnection* conn){
-        }
-    );
-
-    /* 启动 IOThread 线程 */
-    thread->Start();
-
-    /* 主线程休眠 */
-    sleep(120);
-    thread_running.exchange(false);
-
-    /* 归还线程资源 */
-    thread->Stop();
-    for (auto&& thread : threads)  {
-        if (thread->joinable())
-            thread->join();
-    }
-
-    printf("total=%ld err=%ld onreply:%ld\n", total_send.load(), send_err.load(), num.load());
-    return 0;
 }

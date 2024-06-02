@@ -1,5 +1,6 @@
 #include <bbt/redis/connect/AsyncContext.hpp>
 #include <bbt/redis/connect/AsyncConnection.hpp>
+#include <bbt/redis/connect/RedisOption.hpp>
 
 #define SET_TIMEVAL(tv, ms) \
 do { \
@@ -12,17 +13,40 @@ do { \
 namespace bbt::database::redis
 {
 
-AsyncContext::SPtr AsyncContext::Create(bbt::network::libevent::Network network, const bbt::errcode::OnErrorCallback& cb)
+
+void AsyncContext::__CFuncOnConnect(const redisAsyncContext* ctx, int status)
 {
-    return std::make_shared<AsyncContext>(network, cb);
+    if (ctx->c.privdata == nullptr)
+        return;
+
+    auto context = static_cast<AsyncContext*>(ctx->c.privdata);
+    auto conn_bind_thread = context->GetBindThread();
+    if (conn_bind_thread == nullptr)
+        context->OnConnect(RedisErr{"bind thread is null!", RedisErrType::ConnectionFailed}, nullptr);
+
+    auto conn_ptr = AsyncConnection::Create(context);
+    if (status == REDIS_OK)
+        context->OnConnect(std::nullopt, conn_ptr);
+    else
+        context->OnConnect(RedisErr(ctx->errstr, RedisErrType::ConnectionFailed), nullptr);
 }
 
-
-AsyncContext::AsyncContext(bbt::network::libevent::Network network, const bbt::errcode::OnErrorCallback& cb):
-    m_on_error_callback(cb)
+void AsyncContext::__CFuncOnClose(const redisAsyncContext* ctx, int status)
 {
-    memset(&m_redis_option,     '\0',   sizeof(m_redis_option));
-    memset(&m_redis_context,    '\0',   sizeof(m_redis_context));
+    if (ctx->c.privdata == nullptr)
+        return;
+
+    auto context = static_cast<AsyncContext*>(ctx->c.privdata);
+    if (status == REDIS_OK)
+        context->OnClose(std::nullopt, context->m_peer_addr);
+    else
+        context->OnClose(RedisErr(ctx->errstr, RedisErrType::Comm_ParamErr), context->m_peer_addr);
+}
+
+AsyncContext::AsyncContext(std::shared_ptr<RedisOption> opt):
+    m_redis_opt(opt)
+{
+    memset(&m_async_context, '\0', sizeof(m_async_context));
 }
 
 AsyncContext::~AsyncContext()
@@ -30,95 +54,94 @@ AsyncContext::~AsyncContext()
 
 }
 
-RedisErrOpt AsyncContext::AsyncConnect(
-    const std::string&  ip,
-    short               port,
-    int                 connect_timeout,
-    int                 command_timeout,
-    OnConnectCallback   onconn_cb,
-    OnCloseCallback     onclose_cb)
+RedisErrOpt AsyncContext::AsyncConnect()
 {
-    using namespace bbt::network::libevent;
+    Assert(m_async_context == nullptr);
+    m_async_context = redisAsyncConnectWithOptions(m_redis_opt->GetRawRedisOptions());
 
-    if (connect_timeout <= 0)
-        return RedisErr{"connect timeout less then 0!", RedisErrType::Comm_ParamErr};
+    if (m_async_context == nullptr)
+        return RedisErr("new connection failed!", RedisErrType::ConnectionFailed);
+    
+    if (m_async_context->err != 0)
+        return RedisErr(m_async_context->errstr, RedisErrType::ConnectionFailed);
 
-    if (command_timeout <= 0)
-        return RedisErr{"command timeout less then 0!", RedisErrType::Comm_ParamErr};
+    auto thread_sptr = m_redis_opt->GetBindThread();
+    if (thread_sptr == nullptr)
+        return RedisErr{"bind thread is null!", RedisErrType::ConnectionFailed};
 
-    REDIS_OPTIONS_SET_TCP(&m_redis_option, ip.c_str(), port);
-    m_redis_option.options |= REDIS_OPT_NONBLOCK;
-    m_redis_option.options |= REDIS_OPT_REUSEADDR;
-    m_redis_option.options |= REDIS_OPT_NOAUTOFREE;
-    m_redis_option.options |= REDIS_OPT_NOAUTOFREEREPLIES;
+    REDIS_OPTIONS_SET_PRIVDATA(&(m_async_context->c), this, NULL);
+    if (m_async_context->err != 0)
+        return RedisErr(m_async_context->errstr, RedisErrType::ConnectionFailed);
 
-    SET_TIMEVAL(&m_connect_timeout, connect_timeout);
-    SET_TIMEVAL(&m_command_timeout, command_timeout);
-    m_redis_option.connect_timeout = &m_connect_timeout;
-    m_redis_option.command_timeout = &m_command_timeout;
+    auto base = thread_sptr->GetEventLoop()->GetEventBase()->GetRawBase();
+    if (redisLibeventAttach(m_async_context, base) != REDIS_OK)
+        return RedisErr{m_async_context->errstr, RedisErrType::ConnectionFailed};
 
-    m_redis_context = redisAsyncConnectWithOptions(&m_redis_option);
+    if (redisAsyncSetConnectCallback(m_async_context, __CFuncOnConnect) != REDIS_OK)
+        return RedisErr{m_async_context->errstr, RedisErrType::ConnectionFailed};
     
-    if (m_redis_context == nullptr)
-        return RedisErr{"redisAsyncConnectWithOptions() failed!", RedisErrType::ConnectionFailed};
-    else if (m_redis_context->err != 0)
-        return RedisErr{m_redis_context->errstr, RedisErrType::ConnectionFailed};
+    if (redisAsyncSetDisconnectCallback(m_async_context, __CFuncOnClose) != REDIS_OK)
+        return RedisErr{m_async_context->errstr, RedisErrType::ConnectionFailed};
     
-    auto thread_ptr = m_conn_bind_thread.lock();
-    if (thread_ptr == nullptr)
-        return RedisErr{"bind thread is stopped!", RedisErrType::ConnectionFailed};
+    return std::nullopt;
+}
 
-    event_base* base = thread_ptr->GetEventLoop()->GetEventBase()->GetRawBase();
-    if (base == nullptr)
-        return RedisErr{"unexpected error! event_base is nullptr!", RedisErrType::Comm_UnDefErr};
+void AsyncContext::OnConnect(RedisErrOpt err, std::shared_ptr<AsyncConnection> conn)
+{
+    if (conn != nullptr) {
+        m_peer_addr = conn->GetPeerAddress();
+    }
+
+    m_redis_opt->OnConnect(err, conn);
+}
+
+void AsyncContext::OnClose(RedisErrOpt err, bbt::net::IPAddress addr)
+{
+    m_redis_opt->OnClose(err, m_peer_addr);
+}
+
+void AsyncContext::OnError(const RedisErr& err)
+{
+    m_redis_opt->OnError(err);
+}
+
+void AsyncContext::Close()
+{
+    redisAsyncDisconnect(m_async_context);
+}
+
+std::shared_ptr<bbt::network::libevent::IOThread> AsyncContext::GetBindThread()
+{
+    return m_redis_opt->GetBindThread();
+}
+
+int AsyncContext::GetSocketFd()
+{
+    return m_async_context->c.fd;
+}
+
+bbt::net::IPAddress AsyncContext::GetPeerAddress()
+{
+    return m_peer_addr;
+}
+
+RedisErrOpt AsyncContext::SetCommandTimeout(int timeout)
+{
+    timeval command_timeout;
+
+    if (timeout <= 0)
+        return RedisErr("timeout less then 0!", RedisErrType::Comm_ParamErr);
     
-    if (redisLibeventAttach(m_redis_context, base) != REDIS_OK)
-        return RedisErr{m_redis_context->errstr, RedisErrType::Hiredis_Default};
-    
-    if (redisAsyncSetConnectCallback(m_redis_context, __CFuncOnConnect) != REDIS_OK)
-        return RedisErr{m_redis_context->errstr, RedisErrType::Hiredis_Default};
-    
-    if (redisAsyncSetDisconnectCallback(m_redis_context, __CFuncOnClose) != REDIS_OK)
-        return RedisErr{m_redis_context->errstr, RedisErrType::Hiredis_Default};
-    
-    auto safe_this = new AsyncContextCFuncSafeParam{.m_safe_wkptr = weak_from_this()};
-    REDIS_OPTIONS_SET_PRIVDATA(&(m_redis_context->c), safe_this, NULL);
+    SET_TIMEVAL(&command_timeout, timeout);
+    if (redisAsyncSetTimeout(m_async_context, command_timeout) != REDIS_OK) {
+        return RedisErr(m_async_context->errstr, RedisErrType::Comm_OOM);
+    }
 
     return std::nullopt;
 }
 
-void AsyncContext::__CFuncOnConnect(const redisAsyncContext* context, int status)
-{
-    if (context == nullptr)
-        return;
 
-    auto async_context_safe_param = static_cast<AsyncContextCFuncSafeParam*>(context->c.privdata);
-    auto weak_this = async_context_safe_param->m_safe_wkptr;
-    if (weak_this.expired())
-        return;
-
-    auto pthis = weak_this.lock();
-    if (pthis == nullptr)
-        return;
-
-    auto new_redis_conn = AsyncConnection::Create(pthis->m_conn_bind_thread, [=](RedisErrOpt err){ OnErrCallback(err); });
-    if (status == REDIS_OK) {
-        pthis->m_on_connect_callback(new_redis_conn, std::nullopt);
-    } else {
-        pthis->m_on_connect_callback(nullptr, RedisErr{context->errstr, RedisErrType::ConnectionFailed});
-    }
-
-    
-}
-
-void AsyncContext::__CFuncOnClose(const redisAsyncContext* context, int status)
-{
-
-}
-
-
-}
-
+} // namespace bbt::database::redis
 #ifdef SET_TIMEVAL
 #undef SET_TIMEVAL
 #endif

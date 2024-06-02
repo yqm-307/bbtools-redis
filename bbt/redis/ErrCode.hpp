@@ -20,16 +20,13 @@ enum RedisErrType
 };
 
 class RedisErr:
-    public bbt::errcode::Errcode<bbt::database::redis::err::RedisErrType>
+    public bbt::errcode::Errcode
 {
 public:
     RedisErr(const std::string& errinfo, RedisErrType errtype):Errcode(errinfo, errtype) {}
     ~RedisErr() {}
 
-    virtual const bbt::database::redis::err::RedisErrType& Type() const override { return GetErrType(); }
-    virtual const std::string&  What()  const override { return GetMsg(); }
-    virtual const char*         CWhat() const override { return What().c_str(); }
-    virtual bool                IsErr() const override { return (GetErrType() != OK); };
+    virtual bool IsErr() const override { return (Type() != OK); };
 private:
 };
 

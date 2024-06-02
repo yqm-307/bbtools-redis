@@ -24,7 +24,7 @@ public:
 
     void OnReply(RedisErrOpt err, std::shared_ptr<Reply> reply);
 private:
-    RedisErrOpt DoCommand(redisAsyncContext* context, redisCallbackFn* fn);
+    RedisErrOpt DoCommand(AsyncContext* context, redisCallbackFn* fn);
 private:
     std::weak_ptr<AsyncConnection> m_connection;
     std::string     m_cmd;

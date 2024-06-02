@@ -9,6 +9,8 @@
 #include <memory>
 #include <hiredis/hiredis.h>
 #include <hiredis/adapters/libevent.h>
+#include <bbt/base/Attribute.hpp>
+#include <bbt/base/net/IPAddress.hpp>
 #include "bbt/redis/ErrCode.hpp"
 
 namespace bbt::database::redis
@@ -21,6 +23,9 @@ class Reply;
 class RedisConnection;
 class Connection;
 class AsyncConnection;
+class RedisOption;
+class AsyncContext;
+
 typedef err::RedisErr RedisErr;
 typedef std::optional<err::RedisErr> RedisErrOpt;
 typedef err::RedisErrType RedisErrType;
@@ -48,8 +53,8 @@ enum ReplyType
 };
 
 /* RedisConnection 的事件函数原型 */
-typedef std::function<void(RedisErrOpt, AsyncConnection*)>      OnCloseCallback;
-typedef std::function<void(RedisErrOpt, AsyncConnection*)>      OnConnectCallback;
+typedef std::function<void(RedisErrOpt, bbt::net::IPAddress)> OnCloseCallback;
+typedef std::function<void(RedisErrOpt, std::shared_ptr<AsyncConnection>)>   OnConnectCallback;
 typedef std::function<void()>                                   OnReadCallback;
 typedef std::function<void()>                                   OnWriteCallback;
 typedef std::function<void(RedisErrOpt)>                        OnErrCallback; 

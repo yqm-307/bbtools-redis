@@ -13,32 +13,6 @@ do { \
 namespace bbt::database::redis
 {
 
-
-void RedisOption::__CFuncOnConnect(const redisAsyncContext* ctx, int status)
-{
-    if (ctx->c.privdata == nullptr)
-        return;
-
-    auto priv = static_cast<RedisOptionPrivData*>(ctx->c.privdata);
-    auto ptr = std::make_shared<AsyncConnection>(, ctx->c.fd);
-    if (status == REDIS_OK)
-        priv->m_on_connect(std::nullopt);
-    else
-        priv->m_on_connect(RedisErr(ctx->errstr, RedisErrType::ConnectionFailed));
-}
-
-void RedisOption::__CFuncOnClose(const redisAsyncContext* ctx, int status)
-{
-    if (ctx->c.privdata == nullptr)
-        return;
-
-    auto priv = static_cast<RedisOptionPrivData*>(ctx->c.privdata);
-    if (status == REDIS_OK)
-        priv->m_on_close(std::nullopt);
-    else
-        priv->m_on_close(RedisErr(ctx->errstr, RedisErrType::Comm_ParamErr));
-}
-
 RedisOption::RedisOption(std::shared_ptr<bbt::network::libevent::IOThread> bind_thread):
     m_conn_bind_thread(bind_thread)
 {
@@ -47,7 +21,6 @@ RedisOption::RedisOption(std::shared_ptr<bbt::network::libevent::IOThread> bind_
 
 RedisOption::~RedisOption()
 {
-
 }
 
 void RedisOption::SetRedisOptions(int opt)
@@ -84,25 +57,40 @@ void RedisOption::SetOnClose(const OnCloseCallback& on_close_cb)
 
 }
 
-RedisErrOpt RedisOption::Connect()
+void RedisOption::OnConnect(RedisErrOpt err, std::shared_ptr<AsyncConnection> conn)
 {
-    m_context = redisAsyncConnectWithOptions(&m_raw_redis_option);
+    if (m_on_connect == nullptr) {
+        OnError(RedisErr{"onconnect callback is null!", RedisErrType::Comm_ParamErr});    
+        return;
+    }
 
-    auto thread_sptr = m_conn_bind_thread.lock();
-    if (thread_sptr == nullptr)
-        return RedisErr{"bind thread is null!", RedisErrType::ConnectionFailed};
+    m_on_connect(err, conn);
+}
 
-    auto base = thread_sptr->GetEventLoop()->GetEventBase()->GetRawBase();
-    if (redisLibeventAttach(m_context, base) != REDIS_OK)
-        return RedisErr{m_context->errstr, RedisErrType::ConnectionFailed};
+void RedisOption::OnClose(RedisErrOpt err, bbt::net::IPAddress peer_addr)
+{
+    if (m_on_close == nullptr) {
+        OnError(RedisErr{"onclose callback is null!", RedisErrType::Comm_ParamErr});
+        return;
+    }
 
-    if (redisAsyncSetConnectCallback(m_context, __CFuncOnConnect) != REDIS_OK)
-        return RedisErr{m_context->errstr, RedisErrType::ConnectionFailed};
-    
-    if (redisAsyncSetDisconnectCallback(m_context, __CFuncOnClose) != REDIS_OK)
-        return RedisErr{m_context->errstr, RedisErrType::ConnectionFailed};
-    
-    return std::nullopt;
+    m_on_close(err, peer_addr);
+}
+
+void RedisOption::OnError(const RedisErr& err)
+{
+    AssertWithInfo(m_on_error != nullptr, "please set onerror handler!");
+    m_on_error(err);
+}
+
+redisOptions* RedisOption::GetRawRedisOptions()
+{
+    return &m_raw_redis_option;
+}
+
+std::shared_ptr<bbt::network::libevent::IOThread> RedisOption::GetBindThread()
+{
+    return m_conn_bind_thread.lock();
 }
 
 }

@@ -1,7 +1,6 @@
 #include <bbt/redis/RedisClient.hpp>
 
 
-
 namespace bbt::database::redis
 {
 
@@ -36,7 +35,7 @@ RedisErrOpt RedisClient::AsyncConnect(
 {
     using namespace bbt::network::libevent;
 
-    RedisOption opt{network.GetAIOThread()};
+    auto opt = std::make_shared<RedisOption>(network.GetAIOThread());
 
     if (connect_timeout <= 0)
         return RedisErr{"connect timeout less then 0!", RedisErrType::Comm_ParamErr};
@@ -44,15 +43,17 @@ RedisErrOpt RedisClient::AsyncConnect(
     if (command_timeout <= 0)
         return RedisErr{"command timeout less then 0!", RedisErrType::Comm_ParamErr};
     
-    opt.SetTCP(ip.c_str(), port);
-    opt.SetRedisOptions(REDIS_OPT_NONBLOCK);
-    opt.SetRedisOptions(REDIS_OPT_REUSEADDR);
-    opt.SetRedisOptions(REDIS_OPT_NOAUTOFREE);
-    opt.SetRedisOptions(REDIS_OPT_NOAUTOFREEREPLIES);
-    opt.SetConnectTimeout(connect_timeout);
-    opt.SetCommandTimeout(command_timeout);    
+    opt->SetTCP(ip.c_str(), port);
+    opt->SetRedisOptions(REDIS_OPT_NONBLOCK);
+    opt->SetRedisOptions(REDIS_OPT_REUSEADDR);
+    opt->SetRedisOptions(REDIS_OPT_NOAUTOFREE);
+    opt->SetRedisOptions(REDIS_OPT_NOAUTOFREEREPLIES);
+    opt->SetConnectTimeout(connect_timeout);
+    opt->SetCommandTimeout(command_timeout);    
+    
+    AsyncContext* context = new AsyncContext(opt);
 
-    Connect(opt);
+    return context->AsyncConnect();
 }
 
 void RedisClient::OnError(const RedisErr& err)
@@ -60,15 +61,5 @@ void RedisClient::OnError(const RedisErr& err)
     // 初始化已完成检测
     m_on_error(err);
 }
-
-void RedisClient::Connect(RedisOption& opt)
-{
-    redisAsyncContext* context = opt.Connect();
-    if (context != context)
-        return;
-
-    
-}
-
 
 }

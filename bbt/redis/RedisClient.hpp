@@ -1,4 +1,5 @@
 #pragma once
+#include <bbt/base/hash/Hash.hpp>
 #include <bbt/redis/Define.hpp>
 #include <bbt/redis/connect/AsyncConnection.hpp>
 
@@ -20,7 +21,6 @@ public:
         OnCloseCallback     onclose_cb
     );
 protected:
-    void Connect(RedisOption& opt);
     void OnError(const RedisErr& err);
 private:
     std::unordered_map<bbt::net::IPAddress, RedisOption> m_redis_options_map;

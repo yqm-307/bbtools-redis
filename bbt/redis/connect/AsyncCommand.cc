@@ -1,4 +1,5 @@
 #include "bbt/redis/connect/AsyncCommand.hpp"
+#include "bbt/redis/connect/AsyncContext.hpp"
 
 namespace bbt::database::redis
 {
@@ -20,12 +21,12 @@ void AsyncCommand::OnReply(RedisErrOpt err, std::shared_ptr<Reply> reply)
         m_on_reply_handler(err, reply);
 }
 
-RedisErrOpt AsyncCommand::DoCommand(redisAsyncContext* context, redisCallbackFn* fn)
+RedisErrOpt AsyncCommand::DoCommand(AsyncContext* context, redisCallbackFn* cmd_done_callback)
 {
-    if (redisAsyncCommand(context, fn, this, m_cmd.c_str()) != REDIS_OK)
-        return RedisErr(context->errstr, RedisErrType::Comm_UnDefErr);
+    if (context == nullptr)
+        return RedisErr{"context is null!", RedisErrType::Comm_ParamErr};
 
-    return std::nullopt;
+    return context->AsyncCommand(cmd_done_callback, this, m_cmd.c_str());
 }
 
 
