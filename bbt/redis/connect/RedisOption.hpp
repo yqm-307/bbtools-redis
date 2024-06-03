@@ -12,7 +12,7 @@ namespace bbt::database::redis
 class RedisOption
 {
 public:
-    RedisOption(std::shared_ptr<bbt::network::libevent::IOThread> bind_thread);
+    RedisOption(std::shared_ptr<bbt::network::libevent::IOThread> bind_thread, bbt::errcode::OnErrorCallback onerr);
     ~RedisOption();
 
     void SetRedisOptions(int opt);

@@ -35,7 +35,7 @@ RedisErrOpt RedisClient::AsyncConnect(
 {
     using namespace bbt::network::libevent;
 
-    auto opt = std::make_shared<RedisOption>(network.GetAIOThread());
+    auto opt = std::make_shared<RedisOption>(network.GetAIOThread(), [this](const bbt::errcode::IErrcode& err){ this->OnError(dynamic_cast<const RedisErr&>(err)); });
 
     if (connect_timeout <= 0)
         return RedisErr{"connect timeout less then 0!", RedisErrType::Comm_ParamErr};

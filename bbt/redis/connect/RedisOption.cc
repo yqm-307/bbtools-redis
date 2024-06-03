@@ -13,7 +13,8 @@ do { \
 namespace bbt::database::redis
 {
 
-RedisOption::RedisOption(std::shared_ptr<bbt::network::libevent::IOThread> bind_thread):
+RedisOption::RedisOption(std::shared_ptr<bbt::network::libevent::IOThread> bind_thread, bbt::errcode::OnErrorCallback onerr):
+    m_on_error(onerr),
     m_conn_bind_thread(bind_thread)
 {
     memset(&m_raw_redis_option, '\0', sizeof(m_raw_redis_option));

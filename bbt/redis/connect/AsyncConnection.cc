@@ -50,7 +50,8 @@ AsyncConnection::AsyncConnection(std::shared_ptr<bbt::network::libevent::IOThrea
                                  const bbt::net::IPAddress& addr):
     bbt::network::libevent::LibeventConnection(thread, socket, addr),
     m_io_thread(thread),
-    m_conn_id(m_current_id++)
+    m_conn_id(m_current_id++),
+    m_async_context(context)
 {
 }
 

@@ -66,6 +66,9 @@ void Thread(std::shared_ptr<AsyncConnection> conn)
 void Test1()
 {
     bbt::network::libevent::Network network;
+    network.AutoInitThread(2);
+    network.StartListen("127.0.0.1", 10010, [](auto, auto){});
+    network.Start();
     RedisClient client{[](RedisErrOpt opt){
         perror(opt.value().CWhat());
     }};
