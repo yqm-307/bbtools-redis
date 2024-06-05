@@ -55,7 +55,7 @@ void RedisOption::SetOnConnect(const OnConnectCallback& on_conn_cb)
 
 void RedisOption::SetOnClose(const OnCloseCallback& on_close_cb)
 {
-
+    m_on_close = on_close_cb;
 }
 
 void RedisOption::OnConnect(RedisErrOpt err, std::shared_ptr<AsyncConnection> conn)

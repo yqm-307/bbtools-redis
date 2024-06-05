@@ -27,3 +27,6 @@ target_link_libraries(bbt_redis
 )
 
 add_subdirectory(example)
+
+enable_testing()
+add_subdirectory(unit_test)

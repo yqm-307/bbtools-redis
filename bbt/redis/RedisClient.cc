@@ -50,6 +50,8 @@ RedisErrOpt RedisClient::AsyncConnect(
     opt->SetRedisOptions(REDIS_OPT_NOAUTOFREEREPLIES);
     opt->SetConnectTimeout(connect_timeout);
     opt->SetCommandTimeout(command_timeout);    
+    opt->SetOnConnect(onconn_cb);
+    opt->SetOnClose(onclose_cb);
     
     AsyncContext* context = new AsyncContext(opt);
 

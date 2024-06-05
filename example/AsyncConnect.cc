@@ -65,6 +65,7 @@ void Thread(std::shared_ptr<AsyncConnection> conn)
 
 void Test1()
 {
+    bbt::network::GlobalInit();
     bbt::network::libevent::Network network;
     network.AutoInitThread(2);
     network.StartListen("127.0.0.1", 10010, [](auto, auto){});
@@ -76,19 +77,20 @@ void Test1()
     auto err = client.AsyncConnect(network, "127.0.0.1", 6379, 3000, 3000,
     [](RedisErrOpt error, std::shared_ptr<AsyncConnection> conn)
     {
-        printf("新连接完成!\n");
+        printf("connection open!\n");
     },
     [](RedisErrOpt, bbt::net::IPAddress addr)
     {
-        printf("连接关闭! %s\n", addr.GetIPPort().c_str());
+        printf("connection closed! %s\n", addr.GetIPPort().c_str());
     });
 
     if (err != std::nullopt) {
-        printf("建立连接发生错误 %s\n", err.value().CWhat());
+        printf("AsyncConnect() failed! %s\n", err.value().CWhat());
         return;
     }
 
     std::this_thread::sleep_for(bbt::clock::seconds(2));
+    network.Stop();
 }
 
 int main(int argc, char* argv[])
