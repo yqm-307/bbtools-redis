@@ -21,17 +21,23 @@ bbt::network::libevent::Network* g_network = nullptr;
 struct NetworkFixture
 {
     NetworkFixture() {Init();}
-    ~NetworkFixture() {}
+    ~NetworkFixture() { Destroy(); }
     void Init()
     {
         BOOST_ASSERT(bbt::network::GlobalInit());
-        if (g_network != nullptr) delete g_network;
         g_network = new bbt::network::libevent::Network();
         auto err1 = g_network->AutoInitThread(2);
         BOOST_CHECK_MESSAGE(!err1.IsErr(), err1.CWhat());
         auto err2 = g_network->StartListen("127.0.0.1", 10010, [](auto, auto){});
         BOOST_CHECK_MESSAGE(!err2.IsErr(), err2.CWhat());
+        BOOST_ASSERT(!err2.IsErr());
         g_network->Start();
+    }
+
+    void Destroy()
+    {
+        delete g_network;
+        g_network = nullptr;
     }
 };
 
@@ -75,6 +81,8 @@ BOOST_FIXTURE_TEST_CASE(t_multi_async_connect, NetworkFixture)
 
     sleep(3);
     g_network->Stop();
+    BOOST_CHECK_EQUAL(connect_close_succ_count.load(), test_num);
+    BOOST_CHECK_EQUAL(connect_succ_count.load(), test_num);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

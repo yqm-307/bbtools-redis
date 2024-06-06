@@ -10,8 +10,7 @@ struct Hash
 {
     std::size_t operator()(const bbt::net::IPAddress& arg) const
     {
-        auto data = arg.GetIPPort();
-        return bbt::hash::BKDR::BKDRHash(data.c_str(), data.size());
+        return bbt::hash::BKDR::BKDRHash(arg.GetIPPort());
     }
 };
 
