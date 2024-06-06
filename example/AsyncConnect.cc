@@ -1,4 +1,3 @@
-#include <bbt/base/hash/Hash.hpp>
 #include "bbt/redis/connect/AsyncConnection.hpp"
 #include "bbt/redis/reply/Reply.hpp"
 #include "bbt/redis/RedisClient.hpp"

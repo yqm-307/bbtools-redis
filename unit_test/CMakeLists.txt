@@ -4,6 +4,10 @@ set(BOOST_TEST_LIB
     boost_unit_test_framework
     boost_test_exec_monitor
 )
-# add_executable()
-# target_link_libraries()
-# add_test(NAME )
+add_executable(Test_async_connect Test_async_connect.cc)
+target_link_libraries(Test_async_connect
+    ${BOOST_TEST_LIB}
+    bbt_redis
+)
+
+add_test(NAME Test_async_connect COMMAND Test_async_connect)

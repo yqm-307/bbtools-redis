@@ -1,10 +1,19 @@
 #pragma once
-#include <bbt/base/hash/Hash.hpp>
+#include <bbt/base/hash/BKDR.hpp>
 #include <bbt/redis/Define.hpp>
 #include <bbt/redis/connect/AsyncConnection.hpp>
 
 namespace bbt::database::redis
 {
+
+struct Hash
+{
+    std::size_t operator()(const bbt::net::IPAddress& arg) const
+    {
+        auto data = arg.GetIPPort();
+        return bbt::hash::BKDR::BKDRHash(data.c_str(), data.size());
+    }
+};
 
 class RedisClient
 {
@@ -23,7 +32,7 @@ public:
 protected:
     void OnError(const RedisErr& err);
 private:
-    std::unordered_map<bbt::net::IPAddress, RedisOption> m_redis_options_map;
+    std::unordered_map<bbt::net::IPAddress, RedisOption, Hash> m_redis_options_map;
     OnErrCallback   m_on_error{nullptr};
 };
 
