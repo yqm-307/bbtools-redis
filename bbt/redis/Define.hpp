@@ -57,7 +57,7 @@ typedef std::function<void(RedisErrOpt, bbt::net::IPAddress)> OnCloseCallback;
 typedef std::function<void(RedisErrOpt, std::shared_ptr<AsyncConnection>)>   OnConnectCallback;
 typedef std::function<void()>                                   OnReadCallback;
 typedef std::function<void()>                                   OnWriteCallback;
-typedef std::function<void(RedisErrOpt)>                        OnErrCallback; 
+typedef bbt::errcode::OnErrorCallback                           OnErrCallback;
 
 typedef std::function<void(RedisErrOpt, std::shared_ptr<Reply>)> OnReplyCallback;    /* 异步执行cmd，获取result回调 */
 

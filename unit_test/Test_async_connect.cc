@@ -47,7 +47,7 @@ BOOST_FIXTURE_TEST_CASE(t_single_async_connect, NetworkFixture)
 {
     std::atomic_bool connect_succ = false;
     std::atomic_bool close_succ = false;
-    RedisClient client{[](RedisErrOpt err){ printf("[OnError] %s\n", err.value().CWhat()); }};
+    RedisClient client{[](const bbt::errcode::IErrcode& err){ BOOST_WARN_MESSAGE("[OnError] %s\n", err.CWhat()); }};
 
     auto err3 = client.AsyncConnect(*g_network, "127.0.0.1", 6379, 3000, 3000,
     [&](auto error, auto conn_sptr){ connect_succ.exchange(true); },
@@ -61,13 +61,14 @@ BOOST_FIXTURE_TEST_CASE(t_single_async_connect, NetworkFixture)
     BOOST_CHECK(connect_succ.load());
 }
 
+//TODO 异常，多连接会导致连接丢失，未判定是否为 redis server 丢弃连接
 BOOST_FIXTURE_TEST_CASE(t_multi_async_connect, NetworkFixture)
 {
     const int test_num = 100;
     std::atomic_int connect_succ_count = 0;
     std::atomic_int connect_close_succ_count = 0;
 
-    RedisClient client{[](RedisErrOpt err){ BOOST_WARN_MESSAGE("[OnConnect] %s", err.value().CWhat()); }};
+    RedisClient client{[](const bbt::errcode::IErrcode& err){ BOOST_WARN_MESSAGE("[OnConnect] %s", err.CWhat()); }};
 
     for (int i = 0; i < test_num; ++i)
     {
@@ -79,7 +80,7 @@ BOOST_FIXTURE_TEST_CASE(t_multi_async_connect, NetworkFixture)
             BOOST_ASSERT_MSG(false, err3.value().CWhat());
     }
 
-    sleep(3);
+    sleep(2);
     g_network->Stop();
     BOOST_CHECK_EQUAL(connect_close_succ_count.load(), test_num);
     BOOST_CHECK_EQUAL(connect_succ_count.load(), test_num);

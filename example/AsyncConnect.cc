@@ -69,8 +69,8 @@ void Test1()
     network.AutoInitThread(2);
     network.StartListen("127.0.0.1", 10010, [](auto, auto){});
     network.Start();
-    RedisClient client{[](RedisErrOpt opt){
-        perror(opt.value().CWhat());
+    RedisClient client{[](const bbt::errcode::IErrcode& err){
+        perror(err.CWhat());
     }};
 
     auto err = client.AsyncConnect(network, "127.0.0.1", 6379, 3000, 3000,
